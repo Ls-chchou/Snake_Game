@@ -1,0 +1,174 @@
+import pygame , sys ,random
+from pygame.math import Vector2
+
+# setting
+framerate = 60
+grid_size = 40
+grid_number = 20
+MOVE_INTERVAL = 150   # ms
+
+pygame.init()
+screen = pygame.display.set_mode((grid_size*grid_number,grid_size*grid_number))
+clock = pygame.time.Clock()
+User_event = pygame.USEREVENT
+pygame.time.set_timer(User_event,120)
+font = pygame.font.Font(None, 50)
+font2 = pygame.font.Font(None, 36)
+# object
+
+class Apple:
+    def __init__(self,body):
+        self.x , self.y = random.choice([(x,y) for x in range(grid_number)
+                           for y in range(grid_number)
+                           if Vector2(x,y) not in body])
+
+    def draw(self):
+        rect = pygame.Rect(self.x*grid_size,self.y*grid_size,grid_size,grid_size)
+        pygame.draw.rect(screen,pygame.Color("red"),rect)
+        pygame.draw.rect(screen, (130,0,0), rect, width=7)
+
+    def respawn(self,body):
+        self.x , self.y = random.choice([(x,y) for x in range(grid_number)
+                                   for y in range(grid_number)
+                                   if Vector2(x,y) not in body])
+
+class Snake:
+    def __init__(self,is_AI):
+        self.started = is_AI
+        self.body = [Vector2(grid_number//2,grid_number//2),Vector2(grid_number//2 - 1,grid_number//2)]
+        self.dir = Vector2(1, 0)
+        self.prev_body = [v.copy() for v in self.body] 
+        self.last_move_time = pygame.time.get_ticks() 
+        self.get_apple = False
+    def draw(self):
+        now = pygame.time.get_ticks()
+        t = min(1.0, (now - self.last_move_time) / MOVE_INTERVAL)
+
+        for idx, block in enumerate(self.body):
+            prev = self.prev_body[idx] if idx < len(self.prev_body) else block
+            pos = prev + (block - prev) * t  
+            x = pos.x * grid_size
+            y = pos.y * grid_size
+
+            if idx == 0:
+                rect = pygame.Rect(x, y, grid_size, grid_size)
+                pygame.draw.rect(screen, (0, 0, 255), rect)
+                pygame.draw.rect(screen, (0,0,150), rect, width=6)
+            else:
+                ratio = (idx - 1) / max(1, len(self.body) - 1)
+                r = int(0 + (3 - 0) * ratio)
+                g = int(255 + (60 - 255) * ratio)
+                b = int(0 + (5 - 0) * ratio)
+
+                br = int(3 + (0 - 3) * ratio)
+                bg = int(130 + (40 - 130) * ratio)
+                bb = int(5 + (0 - 5) * ratio)
+                rect = pygame.Rect(x, y, grid_size, grid_size)
+                pygame.draw.rect(screen, (r, g, b), rect)
+                pygame.draw.rect(screen, (br,bg,bb), rect, width=6)
+    def update(self, apple):
+        if not self.started:
+            return 0 
+        head = self.body[0]
+        new_head = head + self.dir
+
+        if not (0 <= new_head.x < grid_number and 0 <= new_head.y < grid_number):
+            return "dead"
+
+        ate = (new_head.x, new_head.y) == (apple.x, apple.y)
+
+        body_to_check = self.body if ate else self.body[:-1] if len(self.body) > 2 else self.body
+        if new_head in body_to_check:
+            return "dead"
+
+        self.prev_body = [v.copy() for v in self.body]
+        self.body.insert(0, new_head)
+        if not ate:
+            self.body.pop()
+        self.last_move_time = pygame.time.get_ticks()
+        return "ate" if ate else "ok"
+        
+    def reset(self,is_AI):
+        self.started = is_AI
+        self.body = [Vector2(grid_number//2,grid_number//2),Vector2(grid_number//2 - 1,grid_number//2)]
+        self.dir = Vector2(1, 0)
+        self.prev_body = [v.copy() for v in self.body] 
+        self.last_move_time = pygame.time.get_ticks() 
+        self.get_apple = False
+
+
+        
+class main_game:
+    def __init__(self,is_AI = False):
+        self.is_AI = is_AI
+        self.snake = Snake(is_AI)
+        self.apple = Apple(self.snake.body)
+        self.score = 0
+        self.gameover = False
+    def reset(self):
+        self.score = 0
+        self.gameover = False
+        self.snake.reset(self.is_AI)
+        self.apple.respawn(self.snake.body)
+    
+    def draw(self):
+        self.apple.draw()
+        self.snake.draw()
+    def step(self):
+        result = self.snake.update(self.apple)
+        if result == "dead":
+            self.gameover = True
+        elif result == "ate":
+            self.score += 150
+            self.apple.respawn(self.snake.body)
+
+
+main = main_game()
+#main program
+while True:
+    if not main.gameover:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    main.reset()   
+                if event.key == pygame.K_w:
+                    if main.snake.dir != Vector2(0,1):
+                        main.snake.dir = Vector2(0,-1)
+                    main.snake.started = True
+                if event.key == pygame.K_a:
+                    if main.snake.dir != Vector2(1,0):
+                        main.snake.dir = Vector2(-1,0)
+                if event.key == pygame.K_s:
+                    if main.snake.dir != Vector2(0,-1):
+                        main.snake.dir = Vector2(0,1)
+                    main.snake.started = True
+                if event.key == pygame.K_d:
+                    if main.snake.dir != Vector2(-1,0):
+                        main.snake.dir = Vector2(1,0)
+                    main.snake.started = True
+            if event.type == User_event:
+                main.step()  
+        screen.fill(pygame.Color("black"))
+        main.draw()
+        text_surf = font.render(f"score: {main.score}", True, (255, 255, 255))
+        text_surf2 = font2.render(f"lenth: {len(main.snake.body)}", True, (255, 255, 255))
+        screen.blit(text_surf, (0,0))
+        screen.blit(text_surf2, (0,40))
+        pygame.display.update()
+    else:
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    main.reset()
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                pygame.quit()
+                sys.exit()
